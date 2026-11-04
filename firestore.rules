@@ -1,0 +1,13 @@
+rules_version = '2';
+
+// NOTE: The app uses simple username + PIN login stored in the database (no Firebase Auth),
+// so Firestore cannot tell who is calling. These rules are therefore open to any client that
+// has the project config. Role checks are enforced in the app only.
+// Keep the project private, and consider adding Firebase Auth later for server-side roles.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
