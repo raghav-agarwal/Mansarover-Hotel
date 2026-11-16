@@ -3,9 +3,6 @@ export const SECTIONS = [
     title: 'Rooms',
     fields: [
       { key: 'occupied', label: 'Rooms occupied' },
-      { key: 'walkIn', label: 'Check-ins (Walk-in)' },
-      { key: 'ota', label: 'Check-ins (OTA)' },
-      { key: 'totalCheckIn', label: 'Total check-in', auto: true },
       { key: 'checkOut', label: 'Check-outs' },
       { key: 'reviews', label: 'Reviews' },
     ],
@@ -15,18 +12,27 @@ export const SECTIONS = [
     fields: [
       { key: 'foodSale', label: 'Food sale (₹)', money: true },
       { key: 'buffet', label: 'Buffet (covers)' },
+      { key: 'inHouseGuests', label: 'In-house guests' },
     ],
   },
   {
     title: 'Finance',
     fields: [
       { key: 'cashReceipt', label: 'Cash receipt (₹)', money: true },
+      { key: 'upiReceipts', label: 'UPI receipts (₹)', money: true },
+      { key: 'cardReceipts', label: 'Card receipts (₹)', money: true },
+      { key: 'bankTransfers', label: 'Bank transfers (₹)', money: true },
+      { key: 'billToCompany', label: 'Bill to Company (₹)', money: true },
+      { key: 'totalReceipts', label: 'Total receipts (₹)', auto: true },
       { key: 'cashExpenses', label: 'Cash expenses (₹)', money: true },
     ],
   },
   {
     title: 'Power',
-    fields: [{ key: 'generatorHrs', label: 'Generator hours', decimal: true }],
+    fields: [
+      { key: 'gen45Hrs', label: '45 KW generator hours', decimal: true },
+      { key: 'gen82Hrs', label: '82 KW generator hours', decimal: true },
+    ],
   },
 ]
 
@@ -39,4 +45,17 @@ export const STATUS = {
   missing: { label: 'Not filled', cls: 'bg-red-100 text-red-700' },
 }
 
-export const totalCheckIn = (s) => (Number(s?.walkIn) || 0) + (Number(s?.ota) || 0)
+
+// Fields calculated from the entered ones (never typed by hand).
+export const totalReceipts = (v) =>
+  ['cashReceipt', 'upiReceipts', 'cardReceipts', 'bankTransfers', 'billToCompany'].reduce((a, k) => a + (Number(v?.[k]) || 0), 0)
+
+export const FINANCE_KEYS = ['cashReceipt', 'upiReceipts', 'cardReceipts', 'bankTransfers', 'billToCompany', 'cashExpenses']
+
+export const financeVerifiedCount = (d) =>
+  d?.status === 'verified'
+    ? FINANCE_KEYS.length // a fully verified day counts as all fields verified (also days verified before newer fields were added)
+    : FINANCE_KEYS.filter((k) => d?.fieldVerified?.[k]).length
+
+// A submitted day is "unverified" until Management verifies the whole summary.
+export const isUnverified = (d) => d?.status === 'submitted'

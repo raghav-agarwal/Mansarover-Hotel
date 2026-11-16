@@ -10,6 +10,13 @@ const SummaryDetail = lazy(() => import('./pages/SummaryDetail'))
 const SummaryMonth = lazy(() => import('./pages/SummaryMonth'))
 const Tasks = lazy(() => import('./pages/Tasks'))
 const Users = lazy(() => import('./pages/Users'))
+const Maintenance = lazy(() => import('./pages/Maintenance'))
+const MaintenanceSetup = lazy(() => import('./pages/MaintenanceSetup'))
+const MaintenanceCheck = lazy(() => import('./pages/MaintenanceCheck'))
+const MaintenanceHistory = lazy(() => import('./pages/MaintenanceHistory'))
+const MaintenanceCheckView = lazy(() => import('./pages/MaintenanceCheckView'))
+const Generator = lazy(() => import('./pages/Generator'))
+const MaintenanceReports = lazy(() => import('./pages/MaintenanceReports'))
 
 export default function App() {
   return (
@@ -26,6 +33,23 @@ export default function App() {
             <Route path="summary" element={<SummaryList />} />
             <Route path="summary/month/:month" element={<SummaryMonth />} />
             <Route path="summary/:date" element={<SummaryDetail />} />
+          </Route>
+
+          <Route element={<ProtectedRoute area="maintenance" />}>
+            <Route path="maintenance" element={<Maintenance />} />
+            <Route path="maintenance/history" element={<MaintenanceHistory />} />
+            <Route path="maintenance/reports" element={<MaintenanceReports />} />
+            <Route path="maintenance/view/:checkId" element={<MaintenanceCheckView />} />
+          </Route>
+          <Route element={<ProtectedRoute area="maintenanceFill" />}>
+            <Route path="maintenance/check/:roomId" element={<MaintenanceCheck />} />
+          </Route>
+          <Route element={<ProtectedRoute area="maintenanceSetup" />}>
+            <Route path="maintenance/setup" element={<MaintenanceSetup />} />
+          </Route>
+
+          <Route element={<ProtectedRoute area="generator" />}>
+            <Route path="generator" element={<Generator />} />
           </Route>
 
           <Route element={<ProtectedRoute area="users" />}>

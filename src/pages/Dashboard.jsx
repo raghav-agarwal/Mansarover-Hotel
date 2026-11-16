@@ -4,6 +4,7 @@ import { collection, doc, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../auth/AuthContext'
 import { can } from '../lib/roles'
+import { FINANCE_KEYS, financeVerifiedCount } from '../lib/summary'
 import { isDuePassed, prettyDate, yesterdayIST } from '../lib/dates'
 import TaskCard from '../components/TaskCard'
 import { sortTasks } from '../lib/tasks'
@@ -34,7 +35,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (user.role !== 'management') return
     return onSnapshot(query(collection(db, 'dailySummaries'), where('status', '==', 'submitted')), (snap) =>
-      setAwaiting(snap.docs.map((d) => d.id).sort().reverse())
+      setAwaiting(snap.docs.map((d) => ({ id: d.id, n: financeVerifiedCount(d.data()) })).sort((x, y) => y.id.localeCompare(x.id)))
     )
   }, [user.role])
 
@@ -72,11 +73,12 @@ export default function Dashboard() {
 
       {awaiting.length > 0 && (
         <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-          <p className="font-semibold text-blue-900">Waiting for your verification</p>
+          <p className="font-semibold text-blue-900">Waiting for your verification ({awaiting.length})</p>
           <ul className="mt-2 space-y-1">
             {awaiting.map((d) => (
-              <li key={d}>
-                <Link to={`/summary/${d}`} className="text-sm text-blue-800 underline">{prettyDate(d)}</Link>
+              <li key={d.id}>
+                <Link to={`/summary/${d.id}`} className="text-sm text-blue-800 underline">{prettyDate(d.id)}</Link>
+                <span className="ml-2 text-xs text-blue-700">{d.n}/{FINANCE_KEYS.length} finance verified</span>
               </li>
             ))}
           </ul>

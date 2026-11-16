@@ -17,7 +17,14 @@ export default function Login() {
   useEffect(() => {
     hasAnyUser()
       .then((any) => setFirstRun(!any))
-      .catch(() => setFirstRun(false))
+      .catch((err) => {
+        setFirstRun(false)
+        setError(
+          err?.code === 'permission-denied'
+            ? 'Database blocked access. Deploy the Firestore rules: npx firebase-tools deploy --only firestore:rules'
+            : 'Cannot reach the database (' + (err?.code || err?.message || 'unknown') + '). Check .env values and that Firestore is created.'
+        )
+      })
   }, [])
 
   if (user) return <Navigate to={location.state?.from?.pathname || '/'} replace />

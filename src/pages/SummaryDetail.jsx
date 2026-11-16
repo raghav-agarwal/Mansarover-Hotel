@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
+import { deleteField, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../auth/AuthContext'
+import NightAuditUpload from '../components/NightAuditUpload'
 import { prettyDate, todayIST } from '../lib/dates'
-import { INPUT_KEYS, SECTIONS, STATUS, totalCheckIn } from '../lib/summary'
+import { FINANCE_KEYS, INPUT_KEYS, SECTIONS, STATUS, financeVerifiedCount, totalReceipts } from '../lib/summary'
 
 const input =
   'w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-right text-lg outline-none focus:border-amber-700 focus:ring-2 focus:ring-amber-200 disabled:bg-stone-100 disabled:text-stone-600'
@@ -19,6 +20,7 @@ export default function SummaryDetail() {
   const [busy, setBusy] = useState(false)
 
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(date) && date <= todayIST()
+  const ref = doc(db, 'dailySummaries', date)
 
   useEffect(() => {
     setLoaded(false)
@@ -37,26 +39,25 @@ export default function SummaryDetail() {
   const isAccountant = user.role === 'accountant'
   const isManagement = user.role === 'management'
   const editable = isAccountant && (status === 'missing' || status === 'draft')
+  const fv = saved?.fieldVerified || {}
+  const verifiedCount = financeVerifiedCount(saved)
+  const allFinanceVerified = verifiedCount === FINANCE_KEYS.length
+  // Management can verify finance fields once the day is submitted (and undo them while it is not yet fully verified).
+  const canVerifyFields = isManagement && (status === 'submitted' || status === 'verified')
 
-  const num = (k) => (vals[k] === '' || vals[k] == null ? 0 : Number(vals[k]))
-  const total = num('walkIn') + num('ota')
+  const autoVals = { totalReceipts: Math.round(totalReceipts(vals) * 100) / 100 }
 
   const setVal = (k, decimal) => (e) => {
     const re = decimal ? /[^0-9.]/g : /\D/g
     setVals((v) => ({ ...v, [k]: e.target.value.replace(re, '') }))
   }
 
-  async function write(patch, doneMsg) {
+  async function run(fn, doneMsg) {
     setBusy(true)
     setMsg('')
     try {
-      const data = Object.fromEntries(INPUT_KEYS.map((k) => [k, vals[k] === '' ? null : Number(vals[k])]))
-      await setDoc(
-        doc(db, 'dailySummaries', date),
-        { date, ...data, totalCheckIn: total, updatedAt: serverTimestamp(), updatedBy: user.name, ...patch },
-        { merge: true }
-      )
-      setMsg(doneMsg)
+      await fn()
+      if (doneMsg) setMsg(doneMsg)
     } catch (e) {
       setMsg('Could not save: ' + (e.message || 'unknown error'))
     } finally {
@@ -64,7 +65,40 @@ export default function SummaryDetail() {
     }
   }
 
+  function write(patch, doneMsg, v = vals) {
+    return run(async () => {
+      const data = Object.fromEntries(INPUT_KEYS.map((k) => [k, v[k] === '' ? null : Number(v[k])]))
+      // A finance field the accountant changed loses its verification.
+      const cleared = {}
+      for (const k of FINANCE_KEYS) {
+        const before = saved?.[k] == null ? '' : Number(saved[k])
+        const after = v[k] === '' ? '' : Number(v[k])
+        if (fv[k] && before !== after) cleared[k] = deleteField()
+      }
+      const body = {
+        date, ...data,
+        totalReceipts: Math.round(totalReceipts(v) * 100) / 100,
+        updatedAt: serverTimestamp(), updatedBy: user.name, ...patch,
+      }
+      if (Object.keys(cleared).length) body.fieldVerified = cleared
+      await setDoc(ref, body, { merge: true })
+    }, doneMsg)
+  }
+
   const saveDraft = () => write({ status: 'draft' }, 'Draft saved.')
+
+  // Night audit values go straight into the form and are saved as a draft, so nothing is lost
+  // if the page refreshes. Tags show which fields came from the report (until they are edited).
+  function applyAudit(fields, fileName) {
+    const merged = { ...vals, ...Object.fromEntries(Object.entries(fields).map(([k, n]) => [k, String(n)])) }
+    setVals(merged)
+    write(
+      { status: 'draft', fromAudit: fields, auditFile: fileName, auditAt: serverTimestamp() },
+      'Night audit applied and saved as draft. Please review the values, then add the rest.',
+      merged
+    )
+  }
+  const fromAudit = saved?.fromAudit || {}
 
   function submit() {
     const blank = INPUT_KEYS.filter((k) => vals[k] === '')
@@ -72,24 +106,36 @@ export default function SummaryDetail() {
     write({ status: 'submitted', submittedBy: user.name, submittedAt: serverTimestamp() }, 'Submitted.')
   }
 
-  async function review(next) {
-    setBusy(true)
-    setMsg('')
-    try {
-      await setDoc(
-        doc(db, 'dailySummaries', date),
-        next === 'verified'
-          ? { status: 'verified', verifiedBy: user.name, verifiedAt: serverTimestamp() }
-          : { status: 'draft', verifiedBy: null, verifiedAt: null },
+  const review = (next) =>
+    run(
+      () =>
+        setDoc(
+          ref,
+          next === 'verified'
+            ? { status: 'verified', verifiedBy: user.name, verifiedAt: serverTimestamp() }
+            : { status: 'draft', verifiedBy: null, verifiedAt: null },
+          { merge: true }
+        ),
+      next === 'verified' ? 'Verified.' : 'Sent back to the accountant as draft.'
+    )
+
+  const verifyField = (k, on) =>
+    run(() =>
+      setDoc(
+        ref,
+        { fieldVerified: { [k]: on ? { by: user.name, at: Date.now() } : deleteField() } },
         { merge: true }
       )
-      setMsg(next === 'verified' ? 'Verified.' : 'Sent back to the accountant as draft.')
-    } catch (e) {
-      setMsg('Could not save: ' + (e.message || 'unknown error'))
-    } finally {
-      setBusy(false)
-    }
-  }
+    )
+
+  const verifyAllFinance = () =>
+    run(() =>
+      setDoc(
+        ref,
+        { fieldVerified: Object.fromEntries(FINANCE_KEYS.filter((k) => !fv[k]).map((k) => [k, { by: user.name, at: Date.now() }])) },
+        { merge: true }
+      )
+    )
 
   return (
     <div className="space-y-4">
@@ -118,27 +164,74 @@ export default function SummaryDetail() {
         </p>
       )}
 
-      {SECTIONS.map((s) => (
-        <section key={s.title} className="rounded-2xl border border-stone-200 bg-white p-4">
-          <h3 className="mb-3 font-semibold text-amber-900">{s.title}</h3>
-          <div className="space-y-3">
-            {s.fields.map((f) => (
-              <label key={f.key} className="flex items-center justify-between gap-3">
-                <span className="text-sm text-stone-700">{f.label}</span>
-                <div className="w-36">
-                  {f.auto ? (
-                    <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-right text-lg font-semibold">{total}</div>
-                  ) : (
-                    <input className={input} inputMode={f.decimal || f.money ? 'decimal' : 'numeric'}
-                      disabled={!editable} placeholder="0"
-                      value={vals[f.key]} onChange={setVal(f.key, f.decimal || f.money)} />
-                  )}
-                </div>
-              </label>
-            ))}
-          </div>
-        </section>
-      ))}
+      {editable && <NightAuditUpload date={date} onApply={applyAudit} disabled={busy} />}
+
+      {SECTIONS.map((s) => {
+        const isFinance = s.title === 'Finance'
+        return (
+          <section key={s.title} className="rounded-2xl border border-stone-200 bg-white p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-semibold text-amber-900">{s.title}</h3>
+              {isFinance && status !== 'missing' && (
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${allFinanceVerified ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                  {verifiedCount}/{FINANCE_KEYS.length} verified
+                </span>
+              )}
+            </div>
+            <div className="space-y-3">
+              {s.fields.map((f) => {
+                const verifiable = FINANCE_KEYS.includes(f.key)
+                const v = fv[f.key]
+                return (
+                  <div key={f.key}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-stone-700">
+                        {f.label}
+                        {fromAudit[f.key] != null && Number(vals[f.key]) === fromAudit[f.key] && (
+                          <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                            from night audit
+                          </span>
+                        )}
+                      </span>
+                      <div className="w-36">
+                        {f.auto ? (
+                          <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-right text-lg font-semibold">
+                            {autoVals[f.key].toLocaleString('en-IN')}
+                          </div>
+                        ) : (
+                          <input className={input} inputMode={f.decimal || f.money ? 'decimal' : 'numeric'}
+                            aria-label={f.label} disabled={!editable} placeholder="0"
+                            value={vals[f.key]} onChange={setVal(f.key, f.decimal || f.money)} />
+                        )}
+                      </div>
+                    </div>
+                    {verifiable && status !== 'missing' && (
+                      <div className="mt-1 flex items-center justify-end gap-2 text-xs">
+                        {!v && status === 'verified' ? (
+                          <span className="text-green-700">✓ Verified</span>
+                        ) : v ? (
+                          <>
+                            <span className="text-green-700">✓ Verified by {v.by}</span>
+                            {canVerifyFields && status === 'submitted' && (
+                              <button disabled={busy} onClick={() => verifyField(f.key, false)}
+                                className="rounded-md bg-stone-100 px-2 py-1 text-stone-700">Undo</button>
+                            )}
+                          </>
+                        ) : canVerifyFields ? (
+                          <button disabled={busy} onClick={() => verifyField(f.key, true)}
+                            className="rounded-md bg-green-600 px-3 py-1 font-medium text-white disabled:opacity-60">Verify</button>
+                        ) : (
+                          <span className="text-amber-700">Not verified</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )
+      })}
 
       {msg && <p className="rounded-xl bg-stone-100 p-3 text-sm">{msg}</p>}
 
@@ -152,11 +245,24 @@ export default function SummaryDetail() {
       )}
 
       {isManagement && status === 'submitted' && (
-        <div className="flex gap-2">
-          <button disabled={busy} onClick={() => review('draft')}
-            className="flex-1 rounded-xl bg-stone-200 py-3 font-medium disabled:opacity-60">Send back</button>
-          <button disabled={busy} onClick={() => review('verified')}
-            className="flex-1 rounded-xl bg-green-700 py-3 font-medium text-white disabled:opacity-60">Verify</button>
+        <div className="space-y-2">
+          {!allFinanceVerified && (
+            <button disabled={busy} onClick={verifyAllFinance}
+              className="w-full rounded-xl bg-green-100 py-2.5 text-sm font-medium text-green-800 disabled:opacity-60">
+              Verify all finance fields
+            </button>
+          )}
+          <div className="flex gap-2">
+            <button disabled={busy} onClick={() => review('draft')}
+              className="flex-1 rounded-xl bg-stone-200 py-3 font-medium disabled:opacity-60">Send back</button>
+            <button disabled={busy || !allFinanceVerified} onClick={() => review('verified')}
+              className="flex-1 rounded-xl bg-green-700 py-3 font-medium text-white disabled:opacity-40">Verify summary</button>
+          </div>
+          {!allFinanceVerified && (
+            <p className="text-center text-xs text-stone-500">
+              Verify all {FINANCE_KEYS.length} finance fields first ({verifiedCount}/{FINANCE_KEYS.length} done).
+            </p>
+          )}
         </div>
       )}
       {isManagement && status === 'verified' && (

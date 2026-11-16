@@ -29,3 +29,15 @@ export function prettyDate(dateStr) {
     timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
   })
 }
+
+// Whole days from dateStr to today (IST); 0 = today.
+export function daysAgo(dateStr) {
+  const a = Date.UTC(...dateStr.split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
+  const b = Date.UTC(...todayIST().split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
+  return Math.round((b - a) / 86400000)
+}
+
+export const ageLabel = (dateStr) => {
+  const d = daysAgo(dateStr)
+  return d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`
+}

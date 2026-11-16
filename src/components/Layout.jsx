@@ -17,6 +17,8 @@ export default function Layout() {
     { to: '/', label: 'Home', show: true, end: true },
     { to: '/summary', label: 'Summary', show: can(user, 'summary') },
     { to: '/tasks', label: 'Tasks', show: can(user, 'tasks') },
+    { to: '/maintenance', label: 'Maintenance', show: can(user, 'maintenance') },
+    { to: '/generator', label: 'Generator', show: can(user, 'generator') },
     { to: '/users', label: 'Users', show: can(user, 'users') },
   ].filter((i) => i.show)
 
@@ -49,7 +51,7 @@ export default function Layout() {
           {items.map((i) => (
             <NavLink key={i.to} to={i.to} end={i.end}
               className={({ isActive }) =>
-                `flex-1 py-3 text-center text-sm font-medium ${isActive ? 'text-amber-800' : 'text-stone-500'}`
+                `flex-1 px-0.5 py-3 text-center text-[11px] min-[400px]:text-[13px] font-medium ${isActive ? 'text-amber-800' : 'text-stone-500'}`
               }>
               {i.label}
             </NavLink>

@@ -3,20 +3,23 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
 import { addDays, todayIST } from '../lib/dates'
-import { STATUS } from '../lib/summary'
+import { FINANCE_KEYS, STATUS, financeVerifiedCount, isUnverified } from '../lib/summary'
 
 const COLS = [
   { key: 'occupied', label: 'Occupied', avg: true },
-  { key: 'walkIn', label: 'Walk-in' },
-  { key: 'ota', label: 'OTA' },
-  { key: 'totalCheckIn', label: 'Total In' },
   { key: 'checkOut', label: 'Out' },
   { key: 'reviews', label: 'Reviews' },
   { key: 'foodSale', label: 'Food ₹', money: true },
   { key: 'buffet', label: 'Buffet' },
-  { key: 'cashReceipt', label: 'Receipt ₹', money: true },
+  { key: 'inHouseGuests', label: 'In-house' },
+  { key: 'cashReceipt', label: 'Cash ₹', money: true },
+  { key: 'upiReceipts', label: 'UPI ₹', money: true },
+  { key: 'cardReceipts', label: 'Card ₹', money: true },
+  { key: 'bankTransfers', label: 'Bank ₹', money: true },
+  { key: 'billToCompany', label: 'Bill to Co. ₹', money: true },
   { key: 'cashExpenses', label: 'Expenses ₹', money: true },
-  { key: 'generatorHrs', label: 'Gen hrs', dec: true },
+  { key: 'gen45Hrs', label: '45KW hrs', dec: true },
+  { key: 'gen82Hrs', label: '82KW hrs', dec: true },
 ]
 
 const fmt = (v, c) => {
@@ -130,6 +133,11 @@ export default function SummaryMonth() {
                   <td className="whitespace-nowrap border-b border-stone-100 px-3 py-2">
                     {!future && (
                       <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS[st].cls}`}>{STATUS[st].label}</span>
+                    )}
+                    {!future && isUnverified(r) && (
+                      <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                        Unverified {financeVerifiedCount(r)}/{FINANCE_KEYS.length}
+                      </span>
                     )}
                   </td>
                 </tr>

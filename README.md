@@ -1,29 +1,27 @@
 # Hotel Mansarover app
 
-React + Vite + Tailwind PWA on Firebase (Firestore + Hosting).
+React + Vite + Tailwind PWA on Firebase (Firestore + Hosting). See DEPLOY.md for setup and updates.
 
-## Setup
-1. Create a Firebase project, add a Web app, and enable Firestore (production mode).
-2. Copy `.env.example` to `.env` and fill in the web app config values.
-3. `npm install` then `npm run dev`.
-4. On first open, the login page asks you to create the Management account.
+## Features
+- Username + 4-digit PIN login; roles: Management, Manager, Accountant
+- User management (Management)
+- Daily summary (Accountant fills; Management verifies, including each finance field)
+  - Rooms, Food (incl. in-house guests), Finance (cash, UPI, card, bank transfers, Bill to Company, expenses), Power
+  - Draft / Submitted / Verified, "Unverified" badges, 10 AM IST pending warning
+  - Night audit (.xlsx) upload that auto-fills rooms occupied, check-outs and receipts
+  - Monthly table with totals, month selector, CSV export
+- Tasks (anyone can assign to anyone), shown on Home
+- Maintenance: room types, rooms and a separate checklist per room type (Management setup at /maintenance/setup);
+  rooms grid for everyone; Manager and Management fill checklists (tick/cross, remark required on cross, draft autosave).
+  History table (rooms x months, with fill dates, filters, CSV) and reports (open issues, by-room report) for everyone.
+- Generator fuel (Management + Accountant): the 45 KW and 82 KW generators each have their own tank and their own tab.
+  Management sets each tank's opening volume; Accountant records top-ups (volume before and after, at the start of the day).
+  Fuel used = previous level after top-up minus next level before top-up; that generator's running hours come from the daily
+  summaries. Shows exact L/hr per period, average, High flags, estimated stock and CSV export per generator.
 
-## Deploy
+## Dev
 ```
-npm run build
-npx firebase-tools login
-npx firebase-tools init   # choose existing project; keep firebase.json as is
-npx firebase-tools deploy
+cp .env.example .env   # fill values
+npm install
+npm run dev
 ```
-
-## Phases
-1. Setup, PIN login, roles, route shell (done)
-2. User management (done)
-3. Daily summary + pending banner (done)
-4. Monthly table (done)
-5. Tasks (done)
-6. Polish and deploy (done, see DEPLOY.md)
-
-## Security note
-Login is checked against the database (no Firebase Auth), so Firestore rules are open and role
-checks run in the app only. Keep the project private.
